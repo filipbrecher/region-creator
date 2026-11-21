@@ -1,3 +1,18 @@
+// state shared by the packability check
+type RegionCreatorPacking = {
+    fieldSizes: number[];       // free cells left in each field
+    sizesToPack: number[];      // sizes of the regions that still have to fit
+    necessaryFields: number[];  // fields that must be filled exactly
+    optionalFields: number[];   // fields that may keep space left over
+};
+
+// fields a region fits in, grouped by field size: fields[i] all have sizes[i] free cells
+type RegionCreatorFieldGroups = {
+    sizes: number[];
+    fields: number[][];
+    space: number;  // how many regions of the checked size fit into all of the fields together
+};
+
 type RegionCreatorMode =
     "default" |   // randomly choose the next cell of a region from all possible neighbors
     "spaghetti" | // minimize cell neighbors from the same regions
@@ -606,6 +621,10 @@ class RegionCreator {
     }
 
     // PACKABILITY
+    // After a cell is placed, the free cells split into fields (connected groups of free cells).
+    // Every "necessary" field (one the current region can't reach anymore) must be filled exactly
+    // by the regions that are left; "optional" fields (next to the current region) may keep space
+    // left over, because the current region can still grow into them.
 
     private checkPackability(regionSize: number, cellsLeftToPlace: number): boolean {
         let isPackable = true;
@@ -625,233 +644,122 @@ class RegionCreator {
     }
 
     private static getIsPackable(fieldSizes: number[], sizesToPack: number[], optionalFields: number[]): boolean {
+        let isOptional = new Set(optionalFields);
         let necessaryFields = [];
         for (let i = 0; i < fieldSizes.length; i++) {
-            if (optionalFields.indexOf(i) === -1) {
+            if ( !isOptional.has(i)) {
                 necessaryFields.push(i);
             }
         }
-        return RegionCreator.packNext(fieldSizes, sizesToPack, necessaryFields, optionalFields);
+        return RegionCreator.packNext({ fieldSizes, sizesToPack, necessaryFields, optionalFields });
     }
 
-    // PACK NECESSARY
-
-    private static packNext(fieldSizes: number[], sizesToPack: number[], necessaryFields: number[], optionalFields: number[]): boolean {
+    // Takes all regions of the size at the end of sizesToPack and tries every way of splitting them
+    // between the necessary and the optional fields, then continues with the next size.
+    // fieldSizes and sizesToPack are restored when it returns false.
+    private static packNext(packing: RegionCreatorPacking): boolean {
+        let { fieldSizes, sizesToPack, necessaryFields, optionalFields } = packing;
         if (sizesToPack.length === 0) {
-            if (necessaryFields.length === 0) {
-                return true;
-            } else if (RegionCreatorUtils.arrayGetSumOnElements(fieldSizes, necessaryFields) === 0) {
-                return true;
-            } else {
-                return false;
-            }
+            return RegionCreatorUtils.arrayGetSumOnElements(fieldSizes, necessaryFields) === 0;
         }
         let size = sizesToPack[sizesToPack.length - 1];
         let count = 0;
-        while (sizesToPack[sizesToPack.length - 1] === size) {
+        while (sizesToPack.length > 0 && sizesToPack[sizesToPack.length - 1] === size) {
             count += 1;
             sizesToPack.pop();
-            if (sizesToPack.length === 0) {
-                break;
-            }
         }
 
-        let values = this.getFittableFields(fieldSizes, necessaryFields, size);
-        let necFitSizes = values[0];  // necessary fittable sizes
-        let necFitFields = values[1];  // necessary fittable fields
-        let necFieldSpace = values[2];
-        values = this.getFittableFields(fieldSizes, optionalFields, size);
-        let optFieldSpace = values[2];
+        let necessary = RegionCreator.getFittableFields(fieldSizes, necessaryFields, size);
+        let optional = RegionCreator.getFittableFields(fieldSizes, optionalFields, size);
 
-        if (count > necFieldSpace + optFieldSpace) {
-            for (let i = 0; i < count; i++) {
-                sizesToPack.push(size);
-            }
-            return false;
-        }
-        let necessaryMin = Math.max(0, count - Math.min(count, optFieldSpace));
-        let necessaryMax = Math.min(count, necFieldSpace);
-
-        for (let i = necessaryMin; i < necessaryMax + 1; i++) {
-            let depth = 0;
-            let optCount = count - i;
-            let isPackable = RegionCreator.nextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optCount, necFitSizes, depth, necFitFields, necFieldSpace, i);
-            if (isPackable) {
-                return true;
+        if (count <= necessary.space + optional.space) {
+            let necessaryMin = Math.max(0, count - optional.space);
+            let necessaryMax = Math.min(count, necessary.space);
+            for (let necessaryCount = necessaryMin; necessaryCount <= necessaryMax; necessaryCount++) {
+                let isPackable = RegionCreator.fillGroups(packing, size, necessary, 0, necessary.space, necessaryCount,
+                    () => RegionCreator.fillGroups(packing, size, optional, 0, optional.space, count - necessaryCount,
+                        () => RegionCreator.packNext(packing)
+                    )
+                );
+                if (isPackable) {
+                    return true;
+                }
             }
         }
 
         for (let i = 0; i < count; i++) {
             sizesToPack.push(size);
         }
-
         return false;
     }
 
-    private static nextFieldSize(
-        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-        optionalFields: number[], size: number, optToFit: number, necFitSizes: number[],
-        necDepth: number, necFitFields: number[][], necLeftTotal: number, necLeftToUse: number
+    // Decides how many of the toPlace regions go into each group of equally sized fields (from groupId on),
+    // then calls next. spaceLeft is how many regions fit into the groups from groupId on.
+    private static fillGroups(
+        packing: RegionCreatorPacking, size: number, groups: RegionCreatorFieldGroups,
+        groupId: number, spaceLeft: number, toPlace: number, next: () => boolean
     ): boolean {
-        if (necDepth === necFitSizes.length) {
-            return this.optPackNext(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optToFit);
+        if (groupId === groups.sizes.length) {
+            return next();
         }
-
-        let fieldCount = necFitFields[necDepth].length;
-        let fitsInField = Math.floor(necFitSizes[necDepth] / size);
-        let fittableCount = fieldCount * fitsInField;
-        let maxUsable = Math.min(fittableCount, necLeftToUse);
-        let minUsable = Math.max(0, necLeftToUse + fittableCount - necLeftTotal);
-        for (let i = minUsable; i < maxUsable + 1; i++) {
-            necLeftTotal -= fittableCount;
-            necLeftToUse -= i;
-            let prevUse = i + 1;
-            let useLeft = i;
-            let depthTwo = 0;
-
-            let isPackable = RegionCreator.nextFieldSizePossibility(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optToFit, necFitSizes, necDepth, necFitFields, necLeftTotal, necLeftToUse, i, prevUse, useLeft, depthTwo);
+        let fitsInField = Math.floor(groups.sizes[groupId] / size);
+        let groupSpace = groups.fields[groupId].length * fitsInField;
+        let minUse = Math.max(0, toPlace + groupSpace - spaceLeft);  // what the later groups can't take
+        let maxUse = Math.min(groupSpace, toPlace);
+        for (let use = minUse; use <= maxUse; use++) {
+            let isPackable = RegionCreator.fillFields(packing, size, groups, groupId, spaceLeft - groupSpace, toPlace - use, next, 0, use, use);
             if (isPackable) {
                 return true;
             }
-            necLeftTotal += fittableCount;
-            necLeftToUse += i;
         }
-
         return false;
     }
 
-    private static nextFieldSizePossibility(
-        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-        optionalFields: number[], size: number, optToFit: number, necFitSizes: number[],
-        necDepth: number, necFitFields: number[][], necLeftTotal: number, necLeftToUse: number,
-        useInField: number, prevUse: number, useLeft: number, depthTwo: number
+    // Spreads useLeft regions over the fields of one group (from fieldIndex on), then moves on to the next group.
+    // The fields of a group are interchangeable, so each field gets at most as many regions as the one before it
+    // (maxPerField), which skips permutations of the same split.
+    private static fillFields(
+        packing: RegionCreatorPacking, size: number, groups: RegionCreatorFieldGroups, groupId: number,
+        spaceLeft: number, toPlace: number, next: () => boolean,
+        fieldIndex: number, useLeft: number, maxPerField: number
     ): boolean {
         if (useLeft === 0) {
-            return RegionCreator.nextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optToFit, necFitSizes, necDepth + 1, necFitFields, necLeftTotal, necLeftToUse);
+            return RegionCreator.fillGroups(packing, size, groups, groupId + 1, spaceLeft, toPlace, next);
         }
-
-        let fitsInField = Math.floor(necFitSizes[necDepth] / size);
-        for (let i = 1; i < Math.min(useLeft, prevUse, fitsInField) + 1; i++) {
-            let maxUsableSize = necFitFields[necDepth].length - depthTwo;
-            if (i * maxUsableSize < useLeft) {
-                continue
+        let fields = groups.fields[groupId];
+        let fitsInField = Math.floor(groups.sizes[groupId] / size);
+        let fieldsLeft = fields.length - fieldIndex;
+        for (let use = 1; use <= Math.min(useLeft, maxPerField, fitsInField); use++) {
+            if (use * fieldsLeft < useLeft) {  // the remaining fields (each getting at most `use`) couldn't take the rest
+                continue;
             }
-            useLeft -= i;
-            let fieldId = necFitFields[necDepth][depthTwo];
-            fieldSizes[fieldId] -= size * i;
-            depthTwo += 1;
-            let isPackable = RegionCreator.nextFieldSizePossibility(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optToFit, necFitSizes, necDepth, necFitFields, necLeftTotal, necLeftToUse, useInField, i, useLeft, depthTwo);
-            depthTwo -= 1;
+            let fieldId = fields[fieldIndex];
+            packing.fieldSizes[fieldId] -= size * use;
+            let isPackable = RegionCreator.fillFields(packing, size, groups, groupId, spaceLeft, toPlace, next, fieldIndex + 1, useLeft - use, use);
             if (isPackable) {
                 return true;
             }
-            useLeft += i;
-            fieldSizes[fieldId] += size * i
+            packing.fieldSizes[fieldId] += size * use;
         }
-
         return false;
     }
 
-    // PACK OPTIONAL
-
-    private static optPackNext(
-        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-        optionalFields: number[], size: number, optToFit: number
-    ): boolean {
-        let values = this.getFittableFields(fieldSizes, optionalFields, size);
-        let optFitSizes = values[0];  // optional fittable sizes
-        let optFitFields = values[1];  // optional fittable fields
-        let optFieldSpace = values[2];
-
-        let depth = 0;
-        return RegionCreator.optNextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optFitSizes, depth, optFitFields, optFieldSpace, optToFit);
-    }
-
-    private static optNextFieldSize(
-        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-        optionalFields: number[], size: number, optFitSizes: number[], optDepth: number,
-        optFitFields: number[][], optLeftTotal: number, optLeftToUse: number
-    ): boolean {
-        if (optDepth === optFitSizes.length) {
-            return this.packNext(fieldSizes, sizesToPack, necessaryFields, optionalFields);
-        }
-
-        let fieldCount = optFitFields[optDepth].length;
-        let fitsInField = Math.floor(optFitSizes[optDepth] / size);
-        let fittableCount = fieldCount * fitsInField;
-        let maxUsable = Math.min(fittableCount, optLeftToUse);
-        let minUsable = Math.max(0, optLeftToUse + fittableCount - optLeftTotal);
-        for (let i = minUsable; i < maxUsable + 1; i++) {
-            optLeftTotal -= fittableCount;
-            optLeftToUse -= i;
-            let prevUse = i + 1;
-            let useLeft = i;
-            let depthTwo = 0;
-
-            let isPackable = RegionCreator.optNextFieldSizePossibility(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optFitSizes, optDepth, optFitFields, optLeftTotal, optLeftToUse, i, prevUse, useLeft, depthTwo);
-            if (isPackable) {
-                return true;
-            }
-            optLeftTotal += fittableCount;
-            optLeftToUse += i;
-        }
-
-        return false;
-    }
-
-    private static optNextFieldSizePossibility(
-        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-        optionalFields: number[], size: number, optFitSizes: number[],
-        optDepth: number, optFitFields: number[][], optLeftTotal: number, optLeftToUse: number,
-        useInField: number, prevUse: number, useLeft: number, depthTwo: number
-    ): boolean {
-        if (useLeft === 0) {
-            return RegionCreator.optNextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optFitSizes, optDepth + 1, optFitFields, optLeftTotal, optLeftToUse);
-        }
-
-        let fitsInField = Math.floor(optFitSizes[optDepth] / size);
-        for (let i = 1; i < Math.min(useLeft, prevUse, fitsInField) + 1; i++) {
-            let maxUsableSize = optFitFields[optDepth].length - depthTwo;
-            if (i * maxUsableSize < useLeft) {
-                continue
-            }
-            useLeft -= i;
-            let fieldId = optFitFields[optDepth][depthTwo];
-            fieldSizes[fieldId] -= size * i;
-            depthTwo += 1;
-            let isPackable = RegionCreator.optNextFieldSizePossibility(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optFitSizes, optDepth, optFitFields, optLeftTotal, optLeftToUse, useInField, i, useLeft, depthTwo);
-            depthTwo -= 1;
-            if (isPackable) {
-                return true;
-            }
-            useLeft += i;
-            fieldSizes[fieldId] += size * i
-        }
-
-        return false;
-    }
-
-    private static getFittableFields(fieldSizes: number[], fromFields: number[], size:number): any[] {
-        let fittableSizes: number[];
-        fittableSizes = [];
-        let fittableFields: number[][];
-        fittableFields = [];
-        let fieldSpace = 0;
-        for (let i = 0; i < fromFields.length; i++) {
-            let field = fromFields[i];
+    // Groups the fields (from fromFields) that a region of the given size fits in by their size.
+    private static getFittableFields(fieldSizes: number[], fromFields: number[], size: number): RegionCreatorFieldGroups {
+        let groups: RegionCreatorFieldGroups = { sizes: [], fields: [], space: 0 };
+        for (const field of fromFields) {
             let fieldSize = fieldSizes[field];
             if (fieldSize >= size) {
-                let sizeIndex = fittableSizes.indexOf(fieldSize);
+                let sizeIndex = groups.sizes.indexOf(fieldSize);
                 if (sizeIndex === -1) {
-                    sizeIndex = fittableSizes.length;
-                    fittableSizes.push(fieldSize);
-                    fittableFields.push([]);
+                    sizeIndex = groups.sizes.length;
+                    groups.sizes.push(fieldSize);
+                    groups.fields.push([]);
                 }
-                fittableFields[sizeIndex].push(field);
-                fieldSpace += Math.floor(fieldSize / size);
+                groups.fields[sizeIndex].push(field);
+                groups.space += Math.floor(fieldSize / size);
             }
         }
-
-        return [fittableSizes, fittableFields, fieldSpace]
+        return groups;
     }
 }
