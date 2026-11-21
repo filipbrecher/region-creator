@@ -185,7 +185,7 @@ class RegionCreator {
                     continue;
                 }
                 for (let k = i + 1; k <= i + spacings[j]; k++) {
-                    if (k < 0 || k > originalCellIds.length) {
+                    if (k < 0 || k >= originalCellIds.length) {
                         break;
                     }
                     if (originalCellIds[k] - originalCellIds[i] === spacings[j]) {
@@ -379,13 +379,12 @@ class RegionCreator {
             return;
         }
 
-        let currRegionSize = this.regionSizes.pop();
+        let currRegionSize = this.regionSizes.pop()!;
         let currRegionId = this.regionCount - this.regionSizes.length - 1;
         this.neighboringFields = [];
         this.neighboringCells = [];
         this.neighborsToExclude = [];
 
-        // @ts-ignore
         let cellsPlaced = this.tryPlaceNextCell(currRegionSize, currRegionId, currRegionSize);
         // console.log("VALIDITY", cellsPlaced);
         if (cellsPlaced) {
