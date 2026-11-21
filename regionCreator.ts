@@ -317,11 +317,9 @@ class RegionCreator {
         this._board = RegionCreatorUtils.createArray1d(this.cellCount, -1);
         this._hasBoard = false;
         while ( !this._hasBoard) {
-            // console.log("NEW BOARD");
             this.thenOne = new Date().getTime();
             this.copyBaseValues();
             this.placeNextRegion();
-            // this.print();
 
             let now = new Date().getTime();
             if (((now - this.then) / 1000) >= this.maxTime) {
@@ -368,12 +366,6 @@ class RegionCreator {
     // PLACE NEXT REGION
 
     private placeNextRegion(): void {
-
-        // console.log("NEXT region DOWN");
-        // console.log("region num", this.regionSizes.length);
-        // console.log(this.regionSizes[this.regionSizes.length - 1]);
-        // this.print();
-
         if (this.regionSizes.length === 0) {
             this._hasBoard = true;
             return;
@@ -386,23 +378,15 @@ class RegionCreator {
         this.neighborsToExclude = [];
 
         let cellsPlaced = this.tryPlaceNextCell(currRegionSize, currRegionId, currRegionSize);
-        // console.log("VALIDITY", cellsPlaced);
         if (cellsPlaced) {
             this.placeNextRegion();
         }
-        // console.log("UP UP UP UP");
-        // console.log("UP UP UP UP");
-        // console.log("UP UP UP UP");
-        // console.log("UP UP UP UP");
-        // console.log("UP UP UP UP");
         return;
     }
 
     // PLACE NEXT CELL
 
     private tryPlaceNextCell(regionSize: number, regionId: number, cellsLeftToPlace: number): boolean {
-        // console.log(regionSize - cellsLeftToPlace);
-
         if (cellsLeftToPlace === 0) {
             return true;
         }
@@ -417,7 +401,6 @@ class RegionCreator {
 
         for (let i = 0; i < starterCells.length; i++) {
             let cellId = starterCells[i];
-            // console.log("TRYING", cellId);
 
             // place the cell
             let prevFieldId = this.placeCell(regionId, cellId);
@@ -428,14 +411,10 @@ class RegionCreator {
 
             // check packability
             let isPackable = this.checkPackability(regionSize, cellsLeftToPlace);
-            // console.log("isPackable", isPackable);
             // place next cell
             if (isPackable) {
                 cellsLeftToPlace -= 1;
-                // console.log("PLACED", cellId);
                 let isPlaceable = this.tryPlaceNextCell(regionSize, regionId, cellsLeftToPlace);
-                // console.log("previously placed", cellId);
-                // console.log("isPlaceable", isPlaceable);
                 cellsLeftToPlace += 1;
                 if (isPlaceable) {
                     return true;
@@ -886,14 +865,4 @@ class RegionCreator {
 
         return [fittableSizes, fittableFields, fieldSpace]
     }
-
-    // private print(): void {
-    //     for (let y = 0; y < this.height; y++) {
-    //         let h = [];
-    //         for (let x = 0; x < this.width; x++) {
-    //             h.push(this.regionForCell[y * this.width + x]);
-    //         }
-    //         console.log(h);
-    //     }
-    // }
 }
