@@ -473,24 +473,18 @@ class RegionCreator {
                 RegionCreatorUtils.arrayShuffle(starterCells);
             }
             if (this._mode === RegionCreator.modes.SPAGHETTI) {
-                let neighborCountForCell: number[][] = [[], [], [], [], []];  // how many neighbors of a starterCell are in the current field
-                for (let i = 0; i < starterCells.length; i++) {
-                    let cellId = starterCells[i];
+                let neighborCounts = new Map<number, number>();  // how many neighbors of a starterCell are in the current region
+                for (const cellId of starterCells) {
                     let neighborCount = 0;
-                    for (let j = 0; j < this.baseNeighbors[cellId].length; j++) {
-                        let neighborId = this.baseNeighbors[cellId][j];
+                    for (const neighborId of this.baseNeighbors[cellId]) {
                         if (this.regionForCell[neighborId] === regionId) {
                             neighborCount += 1;
                         }
                     }
-                    neighborCountForCell[neighborCount].push(cellId);
+                    neighborCounts.set(cellId, neighborCount);
                 }
-                starterCells = [];
-                for (let i = 0; i < neighborCountForCell.length; i++) {
-                    for (let j = 0; j < neighborCountForCell[i].length; j++) {
-                        starterCells.push(neighborCountForCell[i][j]);
-                    }
-                }
+                // stable sort: cells with fewer neighbors in the region first, shuffled order kept within equal counts
+                starterCells.sort((a, b) => neighborCounts.get(a)! - neighborCounts.get(b)!);
             }
         }
         return starterCells;
