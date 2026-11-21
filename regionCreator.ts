@@ -1,3 +1,8 @@
+type RegionCreatorMode =
+    "default" |   // randomly choose the next cell of a region from all possible neighbors
+    "spaghetti" | // minimize cell neighbors from the same regions
+    "blob";       // generate circle/clump-like regions
+
 class RegionCreator {
 
     public doLog: boolean = false;
@@ -7,26 +12,7 @@ class RegionCreator {
     public maxRegionSizeTries: number = 10000; // how many times createNewRegionSizes may retry before giving up
     public generateFaster: boolean = true; // if true, generates the first cell of each region in the spot starting from the smallest ids,
                                      // if false, generates the first cell in a random free spot
-    public static modes: { [key: string]: (0 | 1 | 2) } = {
-        DEFAULT: 0, // randomly choose the next cell of a region from all possible neighbors
-        SPAGHETTI: 1, // minimize cell neighbors from the same regions
-        BLOB: 2, // generate circle/clump-like regions
-    }
-    private _mode: (0 | 1 | 2) = RegionCreator.modes.DEFAULT;
-    public set mode(value: ("default" | "spaghetti" | "blob")) {
-        switch (value) {
-            case "default": this._mode = RegionCreator.modes.DEFAULT; break;
-            case "spaghetti": this._mode = RegionCreator.modes.SPAGHETTI; break;
-            case "blob": this._mode = RegionCreator.modes.BLOB; break;
-        }
-    }
-    public get mode(): ("default" | "spaghetti" | "blob") {
-        switch (this._mode) {
-            case 0: return "default";
-            case 1: return "spaghetti";
-            case 2: return "blob";
-        }
-    }
+    public mode: RegionCreatorMode = "default";
 
     private readonly masterWidth: number | null = null;
     private readonly givenPairs: [number, number][] | null = null;
@@ -458,14 +444,14 @@ class RegionCreator {
                     starterCells.push(this.neighboringCells[i]);
                 }
             }
-            if (this._mode === RegionCreator.modes.BLOB) {
+            if (this.mode === "blob") {
                 if (Math.random() < 0.4) {
                     RegionCreatorUtils.arrayShuffle(starterCells);
                 }
             } else {
                 RegionCreatorUtils.arrayShuffle(starterCells);
             }
-            if (this._mode === RegionCreator.modes.SPAGHETTI) {
+            if (this.mode === "spaghetti") {
                 let neighborCounts = new Map<number, number>();  // how many neighbors of a starterCell are in the current region
                 for (const cellId of starterCells) {
                     let neighborCount = 0;
