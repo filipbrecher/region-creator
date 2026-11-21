@@ -42,6 +42,9 @@ class RegionCreator {
         this._forcedRegionSizes = sizes === null ? [] : RegionCreatorUtils.arrayDeepcopy(sizes);
     }
     private baseRegionSizes: number[] = [1];
+    public get regionSizes(): number[] {  // the sizes created by createNewRegionSizes
+        return RegionCreatorUtils.arrayDeepcopy(this.baseRegionSizes);
+    }
     private baseRegionCount: number = 1;
 
     // region conditions
@@ -55,7 +58,7 @@ class RegionCreator {
     private then: number = new Date().getTime();
     private thenOne: number = new Date().getTime();
     // variables to help with the generation
-    private regionSizes: number[] = [];
+    private regionSizesLeft: number[] = [];  // sizes of the regions that still need to be placed
     private regionCount: number = 1;
     private freeNeighbors: number[][] = [[]];
     private regionForCell: number[] = [];
@@ -327,7 +330,7 @@ class RegionCreator {
     }
 
     private copyBaseValues(): void {
-        this.regionSizes = RegionCreatorUtils.arrayDeepcopy(this.baseRegionSizes);
+        this.regionSizesLeft = RegionCreatorUtils.arrayDeepcopy(this.baseRegionSizes);
         this.regionCount = this.baseRegionCount;
         this.freeNeighbors = RegionCreatorUtils.arrayDeepcopy(this.baseNeighbors);
         this.regionForCell = RegionCreatorUtils.createArray1d(this.cellCount, -1);
@@ -352,13 +355,13 @@ class RegionCreator {
     // PLACE NEXT REGION
 
     private placeNextRegion(): void {
-        if (this.regionSizes.length === 0) {
+        if (this.regionSizesLeft.length === 0) {
             this._hasBoard = true;
             return;
         }
 
-        let currRegionSize = this.regionSizes.pop()!;
-        let currRegionId = this.regionCount - this.regionSizes.length - 1;
+        let currRegionSize = this.regionSizesLeft.pop()!;
+        let currRegionId = this.regionCount - this.regionSizesLeft.length - 1;
         this.neighboringFields = [];
         this.neighboringCells = [];
         this.neighborsToExclude = [];
@@ -612,8 +615,8 @@ class RegionCreator {
                 fieldSizes.push(this.cellsForFields[i].length);
             }
             let sizesToPack = [];
-            for (let i = 0; i < this.regionSizes.length; i++) {
-                sizesToPack.push(this.regionSizes[i]);
+            for (let i = 0; i < this.regionSizesLeft.length; i++) {
+                sizesToPack.push(this.regionSizesLeft[i]);
             }
             let optionalFields = RegionCreatorUtils.arrayDeepcopy(this.neighboringFields);
             isPackable = RegionCreator.getIsPackable(fieldSizes, sizesToPack, optionalFields);
