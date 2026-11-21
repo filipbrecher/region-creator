@@ -754,7 +754,8 @@ class RegionCreator {
             return RegionCreator.nextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optToFit, necFitSizes, necDepth + 1, necFitFields, necLeftTotal, necLeftToUse);
         }
 
-        for (let i = 1; i < Math.min(useLeft, prevUse) + 1; i++) {
+        let fitsInField = Math.floor(necFitSizes[necDepth] / size);
+        for (let i = 1; i < Math.min(useLeft, prevUse, fitsInField) + 1; i++) {
             let maxUsableSize = necFitFields[necDepth].length - depthTwo;
             if (i * maxUsableSize < useLeft) {
                 continue
@@ -832,7 +833,8 @@ class RegionCreator {
             return RegionCreator.optNextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optFitSizes, optDepth + 1, optFitFields, optLeftTotal, optLeftToUse);
         }
 
-        for (let i = 1; i < Math.min(useLeft, prevUse) + 1; i++) {
+        let fitsInField = Math.floor(optFitSizes[optDepth] / size);
+        for (let i = 1; i < Math.min(useLeft, prevUse, fitsInField) + 1; i++) {
             let maxUsableSize = optFitFields[optDepth].length - depthTwo;
             if (i * maxUsableSize < useLeft) {
                 continue
@@ -863,13 +865,13 @@ class RegionCreator {
             let field = fromFields[i];
             let fieldSize = fieldSizes[field];
             if (fieldSize >= size) {
-                if (fittableSizes.indexOf(fieldSize) === -1) {
+                let sizeIndex = fittableSizes.indexOf(fieldSize);
+                if (sizeIndex === -1) {
+                    sizeIndex = fittableSizes.length;
                     fittableSizes.push(fieldSize);
-                }
-                if (fittableFields.length < fittableSizes.length) {
                     fittableFields.push([]);
                 }
-                fittableFields[fittableFields.length - 1].push(field);
+                fittableFields[sizeIndex].push(field);
                 fieldSpace += Math.floor(fieldSize / size);
             }
         }
