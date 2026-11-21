@@ -437,7 +437,7 @@ class RegionCreator {
             // undo cell
             this.undoPlaceCell(cellId, prevFieldId);
         }
-        this.neighborsToExclude = this.neighborsToExclude.slice(0, neighborsExcluded * -1);
+        this.neighborsToExclude.length -= neighborsExcluded;
 
         return false;
     }
