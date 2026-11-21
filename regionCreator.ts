@@ -119,32 +119,28 @@ class RegionCreator {
 
     private static getBaseFields(baseNeighbors: number[][]): [number[], number[][]] {
         let cellCount = baseNeighbors.length;
-        let leftCells = RegionCreatorUtils.createArrayIncremented(0, cellCount);
+        let baseFieldForCell: number[] = RegionCreatorUtils.createArray1d(cellCount, -1);
+        let baseCellsForFields: number[][] = [];
+        let reached: boolean[] = RegionCreatorUtils.createArray1d(cellCount, false);
 
-        let baseFieldForCell = RegionCreatorUtils.createArray1d(cellCount, -1);
-        let baseCellsForFields = [];
-
-        let nextField: number[];
-        let cellsToCheck: number[];
-        let cellId: number;
-        let neighborId: number;
-        while (leftCells.length > 0) {
-            nextField = [];
-            cellsToCheck = [leftCells.pop()!];
+        for (let startCell = cellCount - 1; startCell >= 0; startCell--) {  // fields are started from the highest unreached cell
+            if (reached[startCell]) {
+                continue;
+            }
+            let fieldId = baseCellsForFields.length;
+            let nextField: number[] = [];
+            let cellsToCheck = [startCell];
+            reached[startCell] = true;
             while (cellsToCheck.length > 0) {
-                cellId = cellsToCheck.pop()!;
-                leftCells = RegionCreatorUtils.arrayRemoveOne(leftCells, cellId);
+                let cellId = cellsToCheck.pop()!;
                 nextField.push(cellId);
-                for (let i = 0; i < baseNeighbors[cellId].length; i++) {
-                    neighborId = baseNeighbors[cellId][i];
-                    if (nextField.indexOf(neighborId) === -1 && cellsToCheck.indexOf(neighborId) === -1) {
+                baseFieldForCell[cellId] = fieldId;
+                for (const neighborId of baseNeighbors[cellId]) {
+                    if ( !reached[neighborId]) {
+                        reached[neighborId] = true;
                         cellsToCheck.push(neighborId);
                     }
                 }
-            }
-
-            for (let i = 0; i < nextField.length; i++) {
-                baseFieldForCell[nextField[i]] = baseCellsForFields.length;
             }
             baseCellsForFields.push(nextField);
         }
@@ -158,9 +154,16 @@ class RegionCreator {
             neighbors.push([]);
         }
 
+        let indexForCellId = new Map<number, number>();
+        for (let i = 0; i < originalCellIds.length; i++) {
+            if ( !indexForCellId.has(originalCellIds[i])) {
+                indexForCellId.set(originalCellIds[i], i);
+            }
+        }
+
         for (let i = 0; i < pairs.length; i++) {
-            let newIdFirst = originalCellIds.indexOf(pairs[i][0]);
-            let newIdSecond = originalCellIds.indexOf(pairs[i][1]);
+            let newIdFirst = indexForCellId.get(pairs[i][0]) ?? -1;
+            let newIdSecond = indexForCellId.get(pairs[i][1]) ?? -1;
             if (newIdFirst === -1 || newIdSecond === -1 || newIdFirst === newIdSecond) {
                 continue;
             }
@@ -527,15 +530,12 @@ class RegionCreator {
                     let fieldId = this.cellsForFields.length;
                     addedFields.push(fieldId);
                     this.neighboringFields.push(fieldId);
-                    let addedFieldCells: number[];
-                    addedFieldCells = [];
-                    let neighborsForField = neighborsForFields[i];
-                    for (let j = 0; j < neighborsForField.length; j++) {
-                        let neighbor = neighborsForField[j];
+                    let addedFieldCells = neighborsForFields[i];
+                    for (const neighbor of addedFieldCells) {
                         this.fieldForCell[neighbor] = fieldId;
-                        this.cellsForFields[prevFieldId] = RegionCreatorUtils.arrayRemoveOne(this.cellsForFields[prevFieldId], neighbor);
-                        addedFieldCells.push(neighbor);
                     }
+                    let movedCells = new Set(addedFieldCells);
+                    this.cellsForFields[prevFieldId] = this.cellsForFields[prevFieldId].filter(cell => !movedCells.has(cell));
                     this.cellsForFields.push(addedFieldCells);
                 }
             }
@@ -544,39 +544,24 @@ class RegionCreator {
         return addedFields;
     }
 
+    // splits the free neighbors of cellId into the fields (connected groups of free cells) they belong to,
+    // each field listed in breadth-first order
     private getFieldsForCells(cellId: number): number[][] {
-        let toCheck = RegionCreatorUtils.arrayDeepcopy(this.freeNeighbors[cellId]);
-        let fields: number[][];
-        fields = [];
-        let currField: number[];
-        currField = [];
-        let neighborsInCurrentField = [];
-        neighborsInCurrentField.push(toCheck[0]);
-        let doContinue = true;
-        let freeNeighbor: number;
-        let neighborToCheck: number;
-        while (doContinue) {
-            if (neighborsInCurrentField.length === 0) {
-                fields.push(currField);
-                if (toCheck.length === 0) {
-                    doContinue = false;
-                    continue;
-                }
-                currField = [];
-                neighborsInCurrentField.push(toCheck[0]);
-            }
-            neighborToCheck = neighborsInCurrentField[0];
-            for (let i = 0; i < this.freeNeighbors[neighborToCheck].length; i++) {
-                freeNeighbor = this.freeNeighbors[neighborToCheck][i];
-                if (neighborsInCurrentField.indexOf(freeNeighbor) === -1 && currField.indexOf(freeNeighbor) === -1) {
-                    neighborsInCurrentField.push(freeNeighbor);
+        let toCheck: number[] = RegionCreatorUtils.arrayDeepcopy(this.freeNeighbors[cellId]);  // neighbors not reached yet
+        let fields: number[][] = [];
+        while (toCheck.length > 0) {
+            let currField: number[] = [toCheck[0]];  // also the queue: cells from `head` on are not processed yet
+            let reached = new Set<number>(currField);
+            for (let head = 0; head < currField.length; head++) {
+                for (const freeNeighbor of this.freeNeighbors[currField[head]]) {
+                    if ( !reached.has(freeNeighbor)) {
+                        reached.add(freeNeighbor);
+                        currField.push(freeNeighbor);
+                    }
                 }
             }
-            if (toCheck.indexOf(neighborToCheck) >= 0) {
-                toCheck = RegionCreatorUtils.arrayRemoveOne(toCheck, neighborToCheck);
-            }
-            currField.push(neighborToCheck);
-            neighborsInCurrentField.shift();
+            toCheck = toCheck.filter(cell => !reached.has(cell));
+            fields.push(currField);
         }
         return fields;
     }
