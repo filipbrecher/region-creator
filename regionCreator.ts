@@ -293,6 +293,9 @@ class RegionCreator {
                     }
                 } else if (sizeLeft - newSize < this.minRegionSize && sizeLeft < this.maxRegionSize) {
                     newSize = sizeLeft;
+                    if (newSize === this.avgRegionSize && !this.includeAvgRegionSize) {
+                        tryAgain = true;
+                    }
                 }
                 sizeLeft -= newSize;
                 this.baseRegionSizes.push(newSize);
