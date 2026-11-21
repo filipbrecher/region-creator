@@ -1,4 +1,4 @@
-# Region-creator
+# region-creator
 
 This project is licensed under the terms of the Creative Commons Zero v1.0 Universal license.
 
@@ -11,6 +11,8 @@ You can then customize the object's region generation to your likings.
 You can then generate the board and access it.
 
 ## Usage
+
+All errors are thrown as Error objects: invalid argument values throw a RangeError.
 
 ### Setting up the basics
 
@@ -90,13 +92,23 @@ than the avgRegionSize.
     * This is the largest size your regions will be. This must be equal or bigger
 than the avgRegionSize.
 
-It can sometimes happen, during the generation of region sizes, that a size
-smaller than the minRegionSize or bigger than the maxRegionSize will be generated.
+The generated region sizes always stay between the minRegionSize and the maxRegionSize.
+Forced region sizes are used as they are, so they can be outside of that range.
 
 After you've done all of this, you need to call a method to create the sizes.
 You can call this method multiple times to get new region sizes. Here is the method:
 
     regionCreator.createNewRegionSizes();
+
+If the region conditions can't be met (for example only regions of size 4 on a board
+of 10 cells), the method throws an Error after maxRegionSizeTries tries (see Managing runtime).
+Conditions that are possible but very unlikely can fail this way too; calling the method
+again tries again. It throws a RangeError right away if a forced region size isn't
+an integer bigger than 0, or if the forced region sizes add up to more than the cell count.
+
+You can get a copy of the generated sizes, for example to reuse them as forced region sizes:
+
+    let sizes = regionCreator.regionSizes;
 
 Here are some more examples.
 
@@ -111,15 +123,15 @@ Here are some more examples.
     regionCreator.setRegionConditions(1, null, true, 8);
     regionCreator.createNewRegionSizes();
 
-You don't have to call the setForcedRegionSizes method before the setRegionConditions method.
+You don't have to set the forcedRegionSizes before calling the setRegionConditions method.
 Also, the reason why you need to create the region sizes yourself is that you are able to
 generate multiple boards with the same random sizes this way.
 
 ### Shape customization
 
-You can also customize which shapes are preferred by setting generation modes.
-By default, the mode is set to 'default', which doesn't prioritize any cells over other cell.
-Other modes are 'spaghetti' and 'blob'. Spaghetti generates the regions in such a way, that
+You can also customize which shapes are preferred by setting the generation mode
+("default" | "spaghetti" | "blob"). By default, the mode is set to "default", which doesn't
+prioritize any cells over other cells. Spaghetti generates the regions in such a way, that
 each cell of the region has the least amount of neighbors. Blob generates regions in such a way,
 that you end up with regions with clump shapes, similar to circles.
 
@@ -158,7 +170,7 @@ constructor).
     let regionCreator = new RegionCreator(81, 9);
     regionCreator.setRegionConditions(0.6, 0.3, true, 8, 6, 10);
     regionCreator.createNewRegionSizes();
-    regionCreator.createNewBoard();regionCreator.createNewBoard();
+    regionCreator.createNewBoard();
     if (regionCreator.hasBoard) {
       let board = regionCreator.board;
     }
@@ -194,6 +206,11 @@ It is set to 100 tries by default. This can prevent cases where there is no solu
 the region sizes that got generated. Use the variable maxTries to adjust this.
 
     regionCreator.maxTries = 1000;
+
+Generating the region sizes has a similar limit, maxRegionSizeTries. It is set to 10000
+by default. When it is reached, createNewRegionSizes throws an Error (see Region sizes).
+
+    regionCreator.maxRegionSizeTries = 100000;
 
 You can also enable logging using the variable doLog. This will post a message in
 the console using console.log("message"); telling you the time it took the method
