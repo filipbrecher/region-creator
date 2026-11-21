@@ -56,7 +56,7 @@ class RegionCreatorUtils {
         if (Array.isArray(array)) {
             let copy = [];
             for (let i = 0; i < array.length; i++) {
-                copy.push(ArrayUtils.deepcopy(array[i]));
+                copy.push(RegionCreatorUtils.arrayDeepcopy(array[i]));
             }
             return copy;
         } else {
