@@ -87,7 +87,7 @@ class RegionCreator {
     constructor(cellIdentifier: number[] | number, pairIdentifier: number | [number, number][]) {
         if (typeof cellIdentifier === "number") {
             if (cellIdentifier < 1) {
-                throw "OutOfRangeValue: cellIdentifier - cellCount can't be of a value smaller than 1";
+                throw new RangeError("RegionCreator: cellCount (cellIdentifier) can't be smaller than 1.");
             }
             this.originalCellIds = RegionCreatorUtils.createArrayIncremented(0, cellIdentifier);
             this.cellCount = this.originalCellIds.length;
@@ -97,7 +97,7 @@ class RegionCreator {
         }
         if (typeof pairIdentifier === "number") {
             if (pairIdentifier < 1) {
-                throw "OutOfRangeValue: pairIdentifier - masterWidth can't be of a value smaller than 1";
+                throw new RangeError("RegionCreator: masterWidth (pairIdentifier) can't be smaller than 1.");
             }
             this.masterWidth = pairIdentifier;
         } else {
@@ -236,7 +236,7 @@ class RegionCreator {
             this.avgRegionSize = Math.floor((this.minRegionSize + this.maxRegionSize)/2);
         }
         if ( !this.includeAvgRegionSize && (this.minRegionSize === this.avgRegionSize || this.maxRegionSize === this.avgRegionSize)) {
-            throw "UnexpectedValue: If you don't want to include avgRegionSize, you can't have the minRegionSize or the maxRegionSize equal its value.";
+            throw new RangeError("RegionCreator: if includeAvgRegionSize is false, minRegionSize and maxRegionSize can't equal avgRegionSize.");
         }
         return;
     }
@@ -244,18 +244,18 @@ class RegionCreator {
     private setBaseRegionSizes(): void {
         for (const size of this._forcedRegionSizes) {
             if ( !Number.isInteger(size) || size < 1) {
-                throw `UnexpectedValue: forced region sizes must be integers bigger than 0, got ${size}.`;
+                throw new RangeError(`RegionCreator: forced region sizes must be integers bigger than 0, got ${size}.`);
             }
         }
         if (RegionCreatorUtils.arrayGetSum(this._forcedRegionSizes) > this.cellCount) {
-            throw "UnexpectedValue: the forced region sizes add up to more than the cell count.";
+            throw new RangeError("RegionCreator: the forced region sizes add up to more than the cell count.");
         }
 
         let tryAgain = true;
         let tries = 0;
         while (tryAgain) {
             if (tries >= this.maxRegionSizeTries) {
-                throw `RegionSizesNotFound: couldn't generate region sizes in ${this.maxRegionSizeTries} tries, the region conditions may be impossible to meet.`;
+                throw new Error(`RegionCreator: couldn't generate region sizes in ${this.maxRegionSizeTries} tries, the region conditions may be impossible to meet.`);
             }
             tries += 1;
             tryAgain = false;
