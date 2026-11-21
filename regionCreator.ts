@@ -4,6 +4,7 @@ class RegionCreator {
     public maxOneTime: number = 1;
     public maxTime: number = 10;
     public maxTries: number = 100;
+    public maxRegionSizeTries: number = 10000; // how many times createNewRegionSizes may retry before giving up
     public generateFaster: boolean = true; // if true, generates the first cell of each region in the spot starting from the smallest ids,
                                      // if false, generates the first cell in a random free spot
     public static modes: { [key: string]: (0 | 1 | 2) } = {
@@ -241,8 +242,22 @@ class RegionCreator {
     }
 
     private setBaseRegionSizes(): void {
+        for (const size of this._forcedRegionSizes) {
+            if ( !Number.isInteger(size) || size < 1) {
+                throw `UnexpectedValue: forced region sizes must be integers bigger than 0, got ${size}.`;
+            }
+        }
+        if (RegionCreatorUtils.arrayGetSum(this._forcedRegionSizes) > this.cellCount) {
+            throw "UnexpectedValue: the forced region sizes add up to more than the cell count.";
+        }
+
         let tryAgain = true;
+        let tries = 0;
         while (tryAgain) {
+            if (tries >= this.maxRegionSizeTries) {
+                throw `RegionSizesNotFound: couldn't generate region sizes in ${this.maxRegionSizeTries} tries, the region conditions may be impossible to meet.`;
+            }
+            tries += 1;
             tryAgain = false;
             this.baseRegionSizes = RegionCreatorUtils.arrayDeepcopy(this._forcedRegionSizes);
             let sizeLeft = this.cellCount - RegionCreatorUtils.arrayGetSum(this.baseRegionSizes);
